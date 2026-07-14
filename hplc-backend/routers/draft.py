@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -13,6 +13,10 @@ router = APIRouter(prefix="/draft")
 class DraftPayload(BaseModel):
     user_id: str
     data: dict
+
+
+class ClearDraftsPayload(BaseModel):
+    user_id: str
 
 
 @router.get("/{kind}/{draft_key}")
@@ -48,3 +52,12 @@ async def save_draft(kind: str, draft_key: str, payload: DraftPayload, db: Async
     await db.commit()
     await db.refresh(draft)
     return {"saved": True, "updated_at": draft.updated_at.isoformat()}
+
+
+@router.delete("/all")
+async def clear_all_drafts(payload: ClearDraftsPayload, db: AsyncSession = Depends(get_db)):
+    if payload.user_id != "admin":
+        return {"cleared": False}
+    result = await db.execute(delete(DraftDB))
+    await db.commit()
+    return {"cleared": True, "count": result.rowcount or 0}
