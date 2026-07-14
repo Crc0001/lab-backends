@@ -117,6 +117,7 @@ def _render_related_substances(doc, data):
         "mobile_phase": ["名称", "称取/量取", "定容体积ml", "调节/稀释", "批号", "备注"], "blank": ["名称", "组成/来源", "批号", "备注"],
         "system_suitability": ["化合物名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "最终浓度ug/ml"],
         "samples": ["化合物名称", "批号", "称样量mg", "定容体积ml", "稀释剂", "最终浓度mg/ml"],
+        "reference_solution": ["化合物名称", "浓度mg/ml", "移取量ml", "定容体积ml", "最终浓度ug/ml"],
         "liquid_method": ["项目", "条件", "确定依据"], "response_factors": ["名称", "a-线性斜率", "a-相对响应因子", "b-线性斜率", "b-相对响应因子", "相对响应因子均值"],
         "suitability_results": ["系统适用性", "保留时间min", "峰面积", "USP-分离度", "理论塔板数"],
     }
@@ -133,7 +134,10 @@ def _render_related_substances(doc, data):
     _render_rs_table(doc, "2.7 流动相配制", headers["mobile_phase"], data.get("mobile_phase", []))
     _render_rs_table(doc, "2.8 空白溶液", headers["blank"], data.get("blank", []))
     _render_rs_table(doc, "2.9 系统适用性溶液", headers["system_suitability"], data.get("system_suitability", []), (4,))
-    _render_rs_table(doc, "2.10 供试品溶液及自身对照溶液", headers["samples"], data.get("samples", []), (4,))
+    _render_rs_table(doc, "2.10 供试品溶液浓度", headers["samples"], data.get("samples", []), (4,))
+    _render_rs_table(doc, "2.11 对照溶液", data.get("reference_solution_headers") or headers["reference_solution"], data.get("reference_solution", []))
+    if data.get("reference_solution_notes"):
+        _para(doc, f"备注：{data['reference_solution_notes']}")
     _render_rs_table(doc, "3.1 液相方法", headers["liquid_method"], data.get("liquid_method", []))
     for index, method in enumerate(_rs_rows(data.get("hplc_methods"))):
         condition_rows = [
