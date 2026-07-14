@@ -43,6 +43,7 @@ class InspectionItem(BaseModel):
     inspector_date: str = ""
     reviewer: str = ""
     reviewer_date: str = ""
+    related_substances: dict = {}
 
 class InspectionReport(BaseModel):
     report_type: str = "api"               # api | solid | liquid

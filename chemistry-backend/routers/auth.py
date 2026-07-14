@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 _DEFAULT_USERS = {
     "admin": ["*"],
     "zym": ["protein"],
-    "ltf": ["chemistry"],
+    "ltf": ["chemistry", "hplc"],
     "dwh": ["microbiology"],
     "ymx": ["gcms", "hplc"],
 }
@@ -40,13 +40,16 @@ async def seed_default_users() -> None:
     async with AsyncSessionLocal() as db:
         for username, permissions in _DEFAULT_USERS.items():
             result = await db.execute(select(UserDB).where(UserDB.username == username))
-            if result.scalar_one_or_none() is None:
+            user = result.scalar_one_or_none()
+            if user is None:
                 db.add(UserDB(
                     username=username,
                     password_hash=_hash_password("123456"),
                     permissions=permissions,
                     is_active=1,
                 ))
+            elif username == "ltf" and "hplc" not in (user.permissions or []):
+                user.permissions = [*(user.permissions or []), "hplc"]
         await db.commit()
 
 

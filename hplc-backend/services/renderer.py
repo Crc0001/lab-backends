@@ -3,6 +3,7 @@ from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_ALIGN_VERTICAL
+from docx.oxml.ns import qn
 from models import InspectionReport, ValidationReport, InspectionItem, ValidationSection
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -60,6 +61,8 @@ def _heading(doc, text, level=1):
     run = p.add_run(text)
     run.bold = True
     run.font.size = Pt(14 if level == 1 else 12)
+    run.font.name = "Times New Roman"
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "SimSun")
     return p
 
 def _para(doc, text):
@@ -73,6 +76,86 @@ def _cell_text(cell, text, bold=False, size=10):
     run = p.add_run(text)
     run.bold = bold
     run.font.size = Pt(size)
+    run.font.name = "Times New Roman"
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "SimSun")
+    cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+def _set_document_fonts(doc):
+    normal = doc.styles["Normal"]
+    normal.font.name = "Times New Roman"
+    normal._element.rPr.rFonts.set(qn("w:eastAsia"), "SimSun")
+    normal.font.size = Pt(12)
+
+def _rs_rows(raw):
+    return raw if isinstance(raw, list) else []
+
+def _render_rs_table(doc, title, headers, rows, merged_columns=()):
+    _heading(doc, title, level=2)
+    rows = _rs_rows(rows)
+    table = doc.add_table(rows=1 + max(1, len(rows)), cols=len(headers))
+    table.style = "Table Grid"
+    _table_header_row(table, headers)
+    for ri, values in enumerate(rows):
+        for ci, value in enumerate(values[:len(headers)]):
+            _cell_text(table.rows[ri + 1].cells[ci], str(value), size=10.5)
+    if len(rows) > 1:
+        for col in merged_columns:
+            if col < len(headers):
+                first = table.rows[1].cells[col]
+                for ri in range(2, len(rows) + 1):
+                    first = first.merge(table.rows[ri].cells[col])
+    return table
+
+def _render_related_substances(doc, data):
+    section_1 = [("1.1 仪器", "instruments"), ("1.2 试剂", "reagents"), ("1.3 对照品与样品", "references")]
+    headers = {
+        "instruments": ["名称", "型号", "编号", "厂家", "有效期"], "reagents": ["名称", "批号", "级别", "厂家"],
+        "references": ["名称", "批号", "含量", "厂家"], "compounds": ["化合物名称", "纯度%", "称样量mg", "定容体积ml", "稀释剂", "母液浓度mg/ml"],
+        "single_standards": ["化合物名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "最终浓度ug/ml"],
+        "linear_a_stock": ["杂质名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "线性储备液a浓度ug/ml"],
+        "linear_b_stock": ["杂质名称", "称样量mg", "纯度%", "定容体积ml", "稀释剂", "移取量ml", "定容体积ml", "稀释剂", "线性储备液b浓度ug/ml"],
+        "mobile_phase": ["名称", "称取/量取", "定容体积ml", "调节/稀释", "批号", "备注"], "blank": ["名称", "组成/来源", "批号", "备注"],
+        "system_suitability": ["化合物名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "最终浓度ug/ml"],
+        "samples": ["化合物名称", "批号", "称样量mg", "定容体积ml", "稀释剂", "最终浓度mg/ml"],
+        "liquid_method": ["项目", "条件", "确定依据"], "response_factors": ["名称", "a-线性斜率", "a-相对响应因子", "b-线性斜率", "b-相对响应因子", "相对响应因子均值"],
+        "suitability_results": ["系统适用性", "保留时间min", "峰面积", "USP-分离度", "理论塔板数"],
+    }
+    for title, key in section_1:
+        _render_rs_table(doc, title, headers[key], data.get(key, []))
+    _render_rs_table(doc, "2.1 各标准品母液单标及供试品配制", headers["compounds"], data.get("compounds", []), (4,))
+    _render_rs_table(doc, "2.1 供试品配制", headers["compounds"], data.get("sample_preparation", []), (4,))
+    _render_rs_table(doc, "2.2 各定位溶液单标配置", headers["single_standards"], data.get("single_standards", []), (3, 4))
+    _render_rs_table(doc, "2.3 线性储备液a配置", headers["linear_a_stock"], data.get("linear_a_stock", []), (3, 4))
+    _render_rs_table(doc, "2.4 线性储备液b配置", headers["linear_b_stock"], data.get("linear_b_stock", []), (3, 4, 5, 6, 7))
+    for label, key in [("2.5 线性储备液a线性配置", "linear_a"), ("2.6 线性储备液b线性配置", "linear_b")]:
+        for index, values in enumerate(_rs_rows(data.get(key))):
+            _render_rs_table(doc, f"{label} {index + 1}", ["名称", "储备液浓度ug/ml", "移取体积ml", "定容体积ml", "线性点浓度ug/ml", "稀释剂"], values, (1, 5))
+    _render_rs_table(doc, "2.7 流动相配制", headers["mobile_phase"], data.get("mobile_phase", []))
+    _render_rs_table(doc, "2.8 空白溶液", headers["blank"], data.get("blank", []))
+    _render_rs_table(doc, "2.9 系统适用性溶液", headers["system_suitability"], data.get("system_suitability", []), (4,))
+    _render_rs_table(doc, "2.10 供试品溶液及自身对照溶液", headers["samples"], data.get("samples", []), (4,))
+    _render_rs_table(doc, "3.1 液相方法", headers["liquid_method"], data.get("liquid_method", []))
+    for index, method in enumerate(_rs_rows(data.get("hplc_methods"))):
+        condition_rows = [
+            ["色谱柱", method.get("column", "")], ["柱温(℃)", method.get("temp", "")],
+            ["进样盘温度(℃)", method.get("tray_temp", "")], ["进样量(ul)", method.get("injection_volume", "")],
+            ["流速(ml/min)", method.get("flow_rate", "")], ["流动相A", method.get("mobile_a", "")],
+            ["流动相B", method.get("mobile_b", "")], ["切换阀", method.get("switch_valve", "")],
+        ]
+        _render_rs_table(doc, f"3.1 液相方法{index + 1}", ["项目", "条件"], condition_rows)
+        _render_rs_table(doc, "梯度洗脱", ["时间min", "流动相A%", "流动相B%"], method.get("gradient", []))
+        if method.get("notes"):
+            _para(doc, f"备注：{method['notes']}")
+    for label, key in [("4.1 线性a分析", "linear_a_analysis"), ("4.2 线性b分析", "linear_b_analysis")]:
+        for index, values in enumerate(_rs_rows(data.get(key))):
+            _render_rs_table(doc, f"{label} {index + 1}", ["名称", "s1", "s2", "s3", "s4", "s5"], values)
+    _render_rs_table(doc, "4.3 相对响应因子", headers["response_factors"], data.get("response_factors", []))
+    _render_rs_table(doc, "4.4.1 系统适用性结果", headers["suitability_results"], data.get("suitability_results", []))
+    for title, key in [("4.4.2 峰面积", "peak_areas"), ("4.4.3 含量", "contents")]:
+        rows = _rs_rows(data.get(key))
+        header_key = "peak_area_headers" if key == "peak_areas" else "content_headers"
+        headers_for_table = data.get(header_key) or ["批号", "杂质1", "杂质2", "主峰"]
+        _render_rs_table(doc, title, headers_for_table, rows)
 
 def _table_header_row(table, headers):
     row = table.rows[0]
@@ -153,6 +236,7 @@ def _render_item(doc, item: InspectionItem, index: int):
 
 def render_inspection_word(data: InspectionReport) -> bytes:
     doc = Document()
+    _set_document_fonts(doc)
     type_label = {"api": "原料药", "solid": "固体制剂", "liquid": "液体制剂"}.get(data.report_type, "")
     _heading(doc, data.product_name or "检验记录")
     _heading(doc, f"{type_label}检验记录", level=2)
@@ -185,7 +269,11 @@ def render_inspection_word(data: InspectionReport) -> bytes:
     # inspection items
     for i, item in enumerate(data.items):
         doc.add_paragraph()
-        _render_item(doc, item, i)
+        if item.title == "有关物质" and item.related_substances:
+            _heading(doc, "四、有关物质", level=2)
+            _render_related_substances(doc, item.related_substances)
+        else:
+            _render_item(doc, item, i)
 
     # abnormal
     doc.add_paragraph()
