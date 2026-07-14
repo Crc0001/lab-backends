@@ -73,6 +73,7 @@ def _para(doc, text):
 def _cell_text(cell, text, bold=False, size=10):
     cell.text = ""
     p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = p.add_run(text)
     run.bold = bold
     run.font.size = Pt(size)
@@ -106,7 +107,42 @@ def _render_rs_table(doc, title, headers, rows, merged_columns=()):
                     first = first.merge(table.rows[ri].cells[col])
     return table
 
-def _render_related_substances(doc, data):
+def _render_linear_chart(doc, title, values):
+    if not isinstance(values, list) or len(values) < 2:
+        return
+    try:
+        x_values = [float(value) for value in values[0][1:] if str(value).strip()]
+        y_values = [float(value) for value in values[1][1:] if str(value).strip()]
+        count = min(len(x_values), len(y_values))
+        if count < 2:
+            return
+        x_values, y_values = x_values[:count], y_values[:count]
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        slope, intercept = np.polyfit(x_values, y_values, 1)
+        figure, axis = plt.subplots(figsize=(6.4, 3.8), dpi=160)
+        axis.scatter(x_values, y_values, color="#304f9e", s=34, zorder=3, label="Observed")
+        x_line = np.linspace(min(x_values), max(x_values), 100)
+        axis.plot(x_line, slope * x_line + intercept, color="#d97706", linewidth=1.8, label="Linear fit")
+        r_squared = values[3][1] if len(values) > 3 and len(values[3]) > 1 else ""
+        axis.set_xlabel("Concentration (ug/ml)")
+        axis.set_ylabel("Peak area")
+        axis.grid(alpha=0.25)
+        axis.legend(loc="best", frameon=False)
+        axis.text(0.02, 0.98, f"y = {slope:.4f}x {'+' if intercept >= 0 else '-'} {abs(intercept):.4f}\nR² = {r_squared}", transform=axis.transAxes, va="top", fontsize=9)
+        figure.tight_layout()
+        image = BytesIO()
+        figure.savefig(image, format="png")
+        plt.close(figure)
+        image.seek(0)
+        doc.add_picture(image, width=Cm(15))
+        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    except Exception:
+        return
+
+def _render_related_substances(doc, data, is_assay=False):
     section_1 = [("1.1 仪器", "instruments"), ("1.2 试剂", "reagents"), ("1.3 对照品与样品", "references")]
     headers = {
         "instruments": ["名称", "型号", "编号", "厂家", "有效期"], "reagents": ["名称", "批号", "级别", "厂家"],
@@ -123,18 +159,22 @@ def _render_related_substances(doc, data):
     }
     for title, key in section_1:
         _render_rs_table(doc, title, headers[key], data.get(key, []))
-    _render_rs_table(doc, "2.1 各标准品母液单标及供试品配制", headers["compounds"], data.get("compounds", []), (4,))
-    _render_rs_table(doc, "2.1 供试品配制", headers["compounds"], data.get("sample_preparation", []), (4,))
-    _render_rs_table(doc, "2.2 各定位溶液单标配置", headers["single_standards"], data.get("single_standards", []), (3, 4))
-    _render_rs_table(doc, "2.3 线性储备液a配置", headers["linear_a_stock"], data.get("linear_a_stock", []), (3, 4))
-    _render_rs_table(doc, "2.4 线性储备液b配置", headers["linear_b_stock"], data.get("linear_b_stock", []), (3, 4, 5, 6, 7))
+    _render_rs_table(doc, "2.1 各标准品母液及单标配置", headers["compounds"], data.get("compounds", []), (4,))
+    if not is_assay:
+        _render_rs_table(doc, "2.2 各定位溶液单标配置", headers["single_standards"], data.get("single_standards", []), (3, 4))
+    if not is_assay or data.get("assay_stock_enabled"):
+        _render_rs_table(doc, "2.3 含量线性储备液配置" if is_assay else "2.3 线性储备液a配置", headers["linear_a_stock"], data.get("linear_a_stock", []), (3, 4))
+    if not is_assay:
+        _render_rs_table(doc, "2.4 线性储备液b配置", headers["linear_b_stock"], data.get("linear_b_stock", []), (3, 4, 5, 6, 7))
     for label, key in [("2.5 线性储备液a线性配置", "linear_a"), ("2.6 线性储备液b线性配置", "linear_b")]:
         for index, values in enumerate(_rs_rows(data.get(key))):
             _render_rs_table(doc, f"{label} {index + 1}", ["名称", "储备液浓度ug/ml", "移取体积ml", "定容体积ml", "线性点浓度ug/ml", "稀释剂"], values, (1, 5))
     _render_rs_table(doc, "2.7 流动相配制", headers["mobile_phase"], data.get("mobile_phase", []))
     _render_rs_table(doc, "2.8 空白溶液", headers["blank"], data.get("blank", []))
     _render_rs_table(doc, "2.9 系统适用性溶液", headers["system_suitability"], data.get("system_suitability", []), (4,))
-    _render_rs_table(doc, "2.10 供试品溶液浓度", headers["samples"], data.get("samples", []), (4,))
+    sample_headers = data.get("assay_samples_headers") if is_assay else headers["samples"]
+    sample_merge_columns = (6,) if is_assay else (4,)
+    _render_rs_table(doc, "2.10 供试品溶液浓度", sample_headers or headers["samples"], data.get("samples", []), sample_merge_columns)
     _render_rs_table(doc, "2.11 对照溶液", data.get("reference_solution_headers") or headers["reference_solution"], data.get("reference_solution", []))
     if data.get("reference_solution_notes"):
         _para(doc, f"备注：{data['reference_solution_notes']}")
@@ -150,9 +190,15 @@ def _render_related_substances(doc, data):
         _render_rs_table(doc, "梯度洗脱", ["时间min", "流动相A%", "流动相B%"], method.get("gradient", []))
         if method.get("notes"):
             _para(doc, f"备注：{method['notes']}")
-    for label, key in [("4.1 线性a分析", "linear_a_analysis"), ("4.2 线性b分析", "linear_b_analysis")]:
+    analysis_sections = ([("4.1 含量线性分析", "linear_a_analysis")] if data.get("assay_linearity_enabled") else []) if is_assay else [("4.1 线性a分析", "linear_a_analysis"), ("4.2 线性b分析", "linear_b_analysis")]
+    for label, key in analysis_sections:
         for index, values in enumerate(_rs_rows(data.get(key))):
             _render_rs_table(doc, f"{label} {index + 1}", ["名称", "s1", "s2", "s3", "s4", "s5"], values)
+            _render_linear_chart(doc, f"{label} {index + 1}", values)
+    if is_assay:
+        _render_rs_table(doc, f"4.2 {data.get('assay_reference_title') or '对照峰面积'}", data.get("peak_area_headers") or ["名称", "浓度ug/ml", "峰面积1", "峰面积均值"], data.get("peak_areas", []))
+        _render_rs_table(doc, f"4.3 {data.get('assay_calculation_title') or '含量计算'}", data.get("content_headers") or ["名称", "浓度ug/ml", "峰面积1", "峰面积均值"], data.get("contents", []))
+        return
     _render_rs_table(doc, "4.3 相对响应因子", headers["response_factors"], data.get("response_factors", []))
     _render_rs_table(doc, "4.4.1 系统适用性结果", headers["suitability_results"], data.get("suitability_results", []))
     for title, key in [("4.4.2 峰面积", "peak_areas"), ("4.4.3 含量", "contents")]:
@@ -241,29 +287,22 @@ def _render_item(doc, item: InspectionItem, index: int):
 def render_inspection_word(data: InspectionReport) -> bytes:
     doc = Document()
     _set_document_fonts(doc)
-    type_label = {"api": "原料药", "solid": "固体制剂", "liquid": "液体制剂"}.get(data.report_type, "")
-    _heading(doc, data.product_name or "检验记录")
-    _heading(doc, f"{type_label}检验记录", level=2)
 
-    # header info
     pairs = [
-        ("检品名称", data.product_name), ("文件编号", data.doc_number),
-        ("产品批号", data.batch_number), ("批量", data.quantity),
-        ("规格", data.specification), ("来源", data.source),
-        ("请验日期", data.request_date), ("检验依据", data.basis),
+        ("样品名称", data.product_name),
+        ("样品来源", data.source),
+        ("项目类别", data.sample_nature),
+        ("方法提供", data.basis),
+        ("项目内容", data.request_date),
     ]
-    if data.report_type == "solid":
-        pairs.append(("样品性质", data.sample_nature))
     _add_kv_table(doc, pairs)
-
-    doc.add_paragraph(data.company).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # approvals
     if data.approvals:
-        _heading(doc, "审核与批准", level=2)
+        _heading(doc, "实验人与复核人", level=2)
         t = doc.add_table(rows=1 + len(data.approvals), cols=3)
         t.style = "Table Grid"
-        for i, h in enumerate(["职责", "职务", "签名/日期"]):
+        for i, h in enumerate(["职责/实验人", "复核人", "签名/日期"]):
             _cell_text(t.rows[0].cells[i], h, bold=True)
         for ri, row in enumerate(data.approvals):
             _cell_text(t.rows[ri + 1].cells[0], row.role)
@@ -276,14 +315,11 @@ def render_inspection_word(data: InspectionReport) -> bytes:
         if item.title == "有关物质" and item.related_substances:
             _heading(doc, "四、有关物质", level=2)
             _render_related_substances(doc, item.related_substances)
+        elif item.title == "含量测定" and item.assay_data:
+            _heading(doc, "五、含量", level=2)
+            _render_related_substances(doc, item.assay_data, is_assay=True)
         else:
             _render_item(doc, item, i)
-
-    # abnormal
-    doc.add_paragraph()
-    p = doc.add_paragraph()
-    p.add_run("异常情况说明：").bold = True
-    p.add_run(data.abnormal)
 
     buf = BytesIO()
     doc.save(buf)
