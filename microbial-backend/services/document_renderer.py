@@ -234,7 +234,7 @@ def render_report(output_path, payload):
     _add_h2(doc, "3. 试剂信息")
     _add_table(doc, payload.reagents_headers or ["名称", "厂家", "批号"], payload.reagents)
     _add_h2(doc, "4. 仪器信息")
-    _add_table(doc, payload.instruments_headers or ["名称", "厂家", "编号", "校准日期"], payload.instruments)
+    _add_table(doc, payload.instruments_headers or ["名称", "厂家", "编号", "型号", "校准日期"], payload.instruments)
     _add_h2(doc, "5. 耗材清单")
     _add_table(doc, payload.consumables_headers or ["名称", "厂家", "生产日期", "有效期"], payload.consumables)
 
