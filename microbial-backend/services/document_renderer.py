@@ -228,7 +228,7 @@ def render_report(output_path, payload):
     # 一、材料试剂与仪器
     _add_h1(doc, "一、材料试剂与仪器")
     _add_h2(doc, "1. 菌株信息")
-    _add_table(doc, payload.strains_headers or ["菌株名称", "来源", "保存日期", "保存方式"], payload.strains)
+    _add_table(doc, payload.strains_headers or ["菌株", "厂家", "生产日期", "使用代数", "编号", "代数", "来源"], payload.strains)
     _add_h2(doc, "2. 培养基")
     _add_table(doc, payload.media_headers or ["名称", "成分", "配制日期", "灭菌方式"], payload.media)
     _add_h2(doc, "3. 试剂信息")
@@ -340,7 +340,7 @@ def render_preview_html(payload) -> str:
 
     s.append("<h2>一、材料试剂与仪器</h2>")
     for title, hdrs, rows in [
-        ("1. 菌株信息", payload.strains_headers or ["菌株名称", "来源", "保存日期", "保存方式"], payload.strains),
+        ("1. 菌株信息", payload.strains_headers or ["菌株", "厂家", "生产日期", "使用代数", "编号", "代数", "来源"], payload.strains),
         ("2. 培养基", payload.media_headers or ["名称", "成分", "配制日期", "灭菌方式"], payload.media),
         ("3. 试剂信息", payload.reagents_headers or ["名称", "厂家", "批号"], payload.reagents),
         ("4. 仪器信息", payload.instruments_headers or ["名称", "厂家", "编号", "校准日期"], payload.instruments),
@@ -521,7 +521,7 @@ def render_pdf(output_path, payload):
 
     story.append(Paragraph("一、材料试剂与仪器", h1))
     for title, hdrs, rows in [
-        ("1. 菌株信息", payload.strains_headers or ["菌株名称", "来源", "保存日期", "保存方式"], payload.strains),
+        ("1. 菌株信息", payload.strains_headers or ["菌株", "厂家", "生产日期", "使用代数", "编号", "代数", "来源"], payload.strains),
         ("2. 培养基", payload.media_headers or ["名称", "成分", "配制日期", "灭菌方式"], payload.media),
         ("3. 试剂信息", payload.reagents_headers or ["名称", "厂家", "批号"], payload.reagents),
         ("4. 仪器信息", payload.instruments_headers or ["名称", "厂家", "编号", "校准日期"], payload.instruments),
