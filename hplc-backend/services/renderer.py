@@ -148,7 +148,7 @@ def _render_related_substances(doc, data, is_assay=False):
         "instruments": ["名称", "型号", "编号", "厂家", "有效期"], "reagents": ["名称", "批号", "级别", "厂家"],
         "references": ["名称", "批号", "含量", "厂家"], "compounds": ["化合物名称", "纯度%", "称样量mg", "定容体积ml", "稀释剂", "母液浓度mg/ml"],
         "single_standards": ["化合物名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "最终浓度ug/ml"],
-        "linear_a_stock": ["杂质名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "线性储备液a浓度ug/ml"],
+        "linear_a_stock": ["杂质名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "线性储备液浓度ug/ml"],
         "linear_b_stock": ["杂质名称", "称样量mg", "纯度%", "定容体积ml", "稀释剂", "移取量ml", "定容体积ml", "稀释剂", "线性储备液b浓度ug/ml"],
         "mobile_phase": ["名称", "称取/量取", "定容体积ml", "调节/稀释", "批号", "备注"], "blank": ["名称", "组成/来源", "批号", "备注"],
         "system_suitability": ["化合物名称", "母液浓度mg/ml", "移取体积ml", "定容体积ml", "稀释剂", "最终浓度ug/ml"],
@@ -163,19 +163,21 @@ def _render_related_substances(doc, data, is_assay=False):
     if not is_assay:
         _render_rs_table(doc, "2.2 各定位溶液单标配置", headers["single_standards"], data.get("single_standards", []), (3, 4))
     if not is_assay or data.get("assay_stock_enabled"):
-        _render_rs_table(doc, "2.3 含量线性储备液配置" if is_assay else "2.3 线性储备液a配置", headers["linear_a_stock"], data.get("linear_a_stock", []), (3, 4))
+        _render_rs_table(doc, "2.2 含量线性储备液配置" if is_assay else "2.3 线性储备液a配置", headers["linear_a_stock"], data.get("linear_a_stock", []), (3, 4))
     if not is_assay:
         _render_rs_table(doc, "2.4 线性储备液b配置", headers["linear_b_stock"], data.get("linear_b_stock", []), (3, 4, 5, 6, 7))
-    for label, key in [("2.5 线性储备液a线性配置", "linear_a"), ("2.6 线性储备液b线性配置", "linear_b")]:
+    linear_sections = [("2.3 线性储备液线性配置", "linear_a")] if is_assay else [("2.5 线性储备液a线性配置", "linear_a"), ("2.6 线性储备液b线性配置", "linear_b")]
+    for label, key in linear_sections:
         for index, values in enumerate(_rs_rows(data.get(key))):
             _render_rs_table(doc, f"{label} {index + 1}", ["名称", "储备液浓度ug/ml", "移取体积ml", "定容体积ml", "线性点浓度ug/ml", "稀释剂"], values, (1, 5))
-    _render_rs_table(doc, "2.7 流动相配制", headers["mobile_phase"], data.get("mobile_phase", []))
-    _render_rs_table(doc, "2.8 空白溶液", headers["blank"], data.get("blank", []))
-    _render_rs_table(doc, "2.9 系统适用性溶液", headers["system_suitability"], data.get("system_suitability", []), (4,))
+    step_number = 4 if is_assay else 7
+    _render_rs_table(doc, f"2.{step_number} 流动相配制", headers["mobile_phase"], data.get("mobile_phase", []))
+    _render_rs_table(doc, f"2.{step_number + 1} 空白溶液", headers["blank"], data.get("blank", []))
+    _render_rs_table(doc, f"2.{step_number + 2} 系统适用性溶液", headers["system_suitability"], data.get("system_suitability", []), (4,))
     sample_headers = data.get("assay_samples_headers") if is_assay else headers["samples"]
     sample_merge_columns = (6,) if is_assay else (4,)
-    _render_rs_table(doc, "2.10 供试品溶液浓度", sample_headers or headers["samples"], data.get("samples", []), sample_merge_columns)
-    _render_rs_table(doc, "2.11 对照溶液", data.get("reference_solution_headers") or headers["reference_solution"], data.get("reference_solution", []))
+    _render_rs_table(doc, f"2.{step_number + 3} 供试品溶液浓度", sample_headers or headers["samples"], data.get("samples", []), sample_merge_columns)
+    _render_rs_table(doc, f"2.{step_number + 4} 对照溶液", data.get("reference_solution_headers") or headers["reference_solution"], data.get("reference_solution", []))
     if data.get("reference_solution_notes"):
         _para(doc, f"备注：{data['reference_solution_notes']}")
     _render_rs_table(doc, "3.1 液相方法", headers["liquid_method"], data.get("liquid_method", []))
@@ -187,7 +189,7 @@ def _render_related_substances(doc, data, is_assay=False):
             ["流动相B", method.get("mobile_b", "")], ["切换阀", method.get("switch_valve", "")],
         ]
         _render_rs_table(doc, f"3.1 液相方法{index + 1}", ["项目", "条件"], condition_rows)
-        _render_rs_table(doc, "梯度洗脱", ["时间min", "流动相A%", "流动相B%"], method.get("gradient", []))
+        _render_rs_table(doc, "梯度洗脱", method.get("gradient_headers") or ["时间min", "流动相A%", "流动相B%"], method.get("gradient", []))
         if method.get("notes"):
             _para(doc, f"备注：{method['notes']}")
     analysis_sections = ([("4.1 含量线性分析", "linear_a_analysis")] if data.get("assay_linearity_enabled") else []) if is_assay else [("4.1 线性a分析", "linear_a_analysis"), ("4.2 线性b分析", "linear_b_analysis")]

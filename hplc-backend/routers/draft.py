@@ -54,6 +54,19 @@ async def save_draft(kind: str, draft_key: str, payload: DraftPayload, db: Async
     return {"saved": True, "updated_at": draft.updated_at.isoformat()}
 
 
+@router.delete("/{kind}/{draft_key}")
+async def delete_draft(kind: str, draft_key: str, user_id: str = Query(..., min_length=1), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        delete(DraftDB).where(
+            DraftDB.kind == kind,
+            DraftDB.draft_key == draft_key,
+            DraftDB.user_id == user_id,
+        )
+    )
+    await db.commit()
+    return {"cleared": True, "count": result.rowcount or 0}
+
+
 @router.delete("/all")
 async def clear_all_drafts(payload: ClearDraftsPayload, db: AsyncSession = Depends(get_db)):
     if payload.user_id != "admin":
