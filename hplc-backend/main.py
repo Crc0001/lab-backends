@@ -22,7 +22,7 @@ app = FastAPI(title="HPLC报告系统", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://192.168.31.200", "http://localhost", "http://127.0.0.1"],
+    allow_origins=["http://192.168.1.150", "http://localhost", "http://127.0.0.1"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

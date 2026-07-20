@@ -6,7 +6,7 @@ import os
 import httpx
 from datetime import datetime
 
-AUDIT_BACKEND_URL = os.getenv("AUDIT_BACKEND_URL", "http://192.168.31.200:8001")
+AUDIT_BACKEND_URL = os.getenv("AUDIT_BACKEND_URL", "http://127.0.0.1:8001")
 
 
 async def log_action(user: str, action: str, log_type: str = "action"):

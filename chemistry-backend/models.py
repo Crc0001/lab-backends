@@ -220,6 +220,26 @@ class UserDB(Base):
     created_at = Column(DateTime, default=lambda: dt.datetime.now(dt.timezone.utc))
 
 
+class EquipmentDB(Base):
+    __tablename__ = "equipment"
+
+    sequence = Column(Integer, primary_key=True, autoincrement=False)
+    equipment_code = Column(String(100), nullable=True, index=True)
+    instrument_name = Column(String(255), nullable=False, index=True)
+    model = Column(String(255), nullable=True)
+    manufacturer = Column(String(255), nullable=True)
+    manufacture_date = Column(String(50), nullable=True)
+    installation_date = Column(String(50), nullable=True)
+    verification_type = Column(String(100), nullable=True)
+    purchase_date = Column(String(50), nullable=True)
+    earliest_calibration_date = Column(String(50), nullable=True)
+    latest_calibration_date = Column(String(50), nullable=True)
+    next_calibration_date = Column(String(50), nullable=True)
+    next_verification_date = Column(String(50), nullable=True)
+    verification_cycle = Column(String(100), nullable=True)
+    remarks = Column(String(500), nullable=True)
+
+
 class DraftDB(Base):
     __tablename__ = "drafts"
 
